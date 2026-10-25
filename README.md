@@ -61,3 +61,4 @@
 **Где лог?**
 `Документы\ZapretUpdater\zapret-updater.log`.
 
+«Проверка файла: certutil -hashfile zapret-updater.exe SHA256, результат должен совпасть с содержимым .sha256 из релиза».
