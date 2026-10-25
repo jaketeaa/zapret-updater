@@ -1,0 +1,34 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build zapret-updater.exe
+        shell: cmd
+        run: '"%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /target:exe /codepage:65001 /out:zapret-updater.exe /win32manifest:app.manifest /win32icon:icon.ico /r:System.dll /r:System.Core.dll /r:System.ServiceProcess.dll /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll Program.cs'
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zapret-updater
+          path: zapret-updater.exe
+
+      - name: Publish release (only for v* tags)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: zapret-updater.exe
+          generate_release_notes: true
