@@ -17,7 +17,8 @@ using Microsoft.Win32;
 [assembly: AssemblyProduct("Zapret Updater by jaketea")]
 [assembly: AssemblyCompany("jaketea")]
 [assembly: AssemblyCopyright("by jaketea")]
-[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
 
 namespace ZapretUpdater
 {
@@ -163,12 +164,20 @@ namespace ZapretUpdater
             RawFile(s + "\r\n");
         }
 
-        public static void Banner()
+        static string Center(string t, int w)
         {
-            Plain("  +----------------------------------+", ConsoleColor.Cyan);
-            Plain("  |          ZAPRET  UPDATER         |", ConsoleColor.Green);
-            Plain("  |           by  jaketea            |", ConsoleColor.Yellow);
-            Plain("  +----------------------------------+", ConsoleColor.Cyan);
+            if (t.Length >= w) return t;
+            int left = (w - t.Length) / 2;
+            return new string(' ', left) + t + new string(' ', w - t.Length - left);
+        }
+
+        public static void Banner(string ver)
+        {
+            string line = "  +" + new string('-', 34) + "+";
+            Plain(line, ConsoleColor.Cyan);
+            Plain("  |" + Center("ZAPRET  UPDATER", 34) + "|", ConsoleColor.Green);
+            Plain("  |" + Center("v" + ver + "  by  jaketea", 34) + "|", ConsoleColor.Yellow);
+            Plain(line, ConsoleColor.Cyan);
         }
 
         public static void Blank()
@@ -883,6 +892,8 @@ namespace ZapretUpdater
 
     static class Program
     {
+        internal const string AppVersion = "1.0.1";
+        internal const string Repo = "jaketeaa/zapret-updater";
         static string AppDir;
         internal static string DataDir;
 
@@ -896,8 +907,14 @@ namespace ZapretUpdater
             Native.DisableQuickEdit();
             Log.Verbose = Array.IndexOf(args, "--verbose") >= 0;
             bool wait = Array.IndexOf(args, "--nowait") < 0;
-            try { Console.Title = "Zapret Updater by jaketea"; } catch { }
-            Log.Banner();
+            try { Console.Title = "Zapret Updater v" + AppVersion + " by jaketea"; } catch { }
+            Log.Banner(AppVersion);
+            if (Array.IndexOf(args, "--help") >= 0 || Array.IndexOf(args, "-h") >= 0 || Array.IndexOf(args, "/?") >= 0)
+            {
+                PrintHelp();
+                Log.Flush();
+                return 0;
+            }
             int code = 0;
             Stopwatch total = Stopwatch.StartNew();
             try
@@ -913,7 +930,7 @@ namespace ZapretUpdater
             }
             Log.Blank();
             Log.Write("Всего прошло: " + total.Elapsed.ToString(@"mm\:ss"), ConsoleColor.Gray);
-            Log.Plain("Zapret Updater by jaketea", ConsoleColor.DarkYellow);
+            Log.Plain("Zapret Updater v" + AppVersion + " by jaketea", ConsoleColor.DarkYellow);
             Log.Flush();
             if (wait)
             {
@@ -926,9 +943,61 @@ namespace ZapretUpdater
             return code;
         }
 
+        static void PrintHelp()
+        {
+            Log.Blank();
+            Log.Plain("Использование: zapret-updater.exe [параметры]  (запускать от имени администратора)", ConsoleColor.White);
+            Log.Blank();
+            Log.Plain("  --force         обновить, даже если версия актуальна", ConsoleColor.Gray);
+            Log.Plain("  --test          всегда запускать тесты и выбрать конфигурацию заново", ConsoleColor.Gray);
+            Log.Plain("  --fresh         чистая установка в папку zapret на рабочем столе", ConsoleColor.Gray);
+            Log.Plain("  --dir <путь>    указать папку zapret", ConsoleColor.Gray);
+            Log.Plain("  --nowait        не ждать Enter в конце", ConsoleColor.Gray);
+            Log.Plain("  --no-selfcheck  не проверять обновления самой программы", ConsoleColor.Gray);
+            Log.Plain("  --verbose       выводить сырой вывод процессов", ConsoleColor.Gray);
+            Log.Plain("  --help, -h      показать эту справку", ConsoleColor.Gray);
+            Log.Blank();
+            Log.Plain("Лог: " + Log.FilePath, ConsoleColor.DarkGray);
+            Log.Plain("https://github.com/" + Repo, ConsoleColor.DarkGray);
+        }
+
+        static bool IsNewer(string tag, string current)
+        {
+            System.Version a, b;
+            if (!System.Version.TryParse(tag.Trim().TrimStart('v', 'V'), out a)) return false;
+            if (!System.Version.TryParse(current.Trim().TrimStart('v', 'V'), out b)) return false;
+            return a > b;
+        }
+
+        // Checks whether a newer release of this program exists. Never fails the run.
+        static void CheckSelfUpdate()
+        {
+            try
+            {
+                string json = HttpGet("https://api.github.com/repos/" + Repo + "/releases/latest", 8000);
+                Match mt = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
+                if (!mt.Success) return;
+                string tag = mt.Groups[1].Value;
+                if (IsNewer(tag, AppVersion))
+                {
+                    Log.Write("Доступна новая версия Zapret Updater: " + tag + " (у тебя v" + AppVersion + ")", ConsoleColor.Yellow);
+                    Log.Write("   https://github.com/" + Repo + "/releases/latest", ConsoleColor.Yellow);
+                }
+                else
+                {
+                    Log.Write("Zapret Updater v" + AppVersion + " - последняя версия.", ConsoleColor.Green);
+                }
+            }
+            catch
+            {
+                Log.Write("Не удалось проверить обновление самой программы (не критично).", ConsoleColor.Gray);
+            }
+        }
+
         static void Run(string[] args)
         {
             if (!IsAdmin()) throw new Exception("Нужны права администратора (ПКМ по exe -> Запуск от имени администратора).");
+            if (Array.IndexOf(args, "--no-selfcheck") < 0) CheckSelfUpdate();
             bool force = Array.IndexOf(args, "--force") >= 0;
             bool forceTests = Array.IndexOf(args, "--test") >= 0;
 
@@ -1313,11 +1382,16 @@ namespace ZapretUpdater
 
         static string HttpGet(string url)
         {
+            return HttpGet(url, 30000);
+        }
+
+        static string HttpGet(string url, int timeoutMs)
+        {
             ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
             HttpWebRequest r = (HttpWebRequest)WebRequest.Create(url);
             r.UserAgent = "zapret-updater";
             r.Accept = "application/vnd.github+json";
-            r.Timeout = 30000;
+            r.Timeout = timeoutMs;
             using (WebResponse resp = r.GetResponse())
             using (StreamReader sr = new StreamReader(resp.GetResponseStream(), Encoding.UTF8))
                 return sr.ReadToEnd();
