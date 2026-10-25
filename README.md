@@ -1,4 +1,5 @@
 # Zapret Updater
+<img width="648" height="328" alt="photo_2026-10-25_21-46-27" src="https://github.com/user-attachments/assets/64ea4d4e-abdc-4f37-bdc8-ee1088c5c9e5" />
 
 Автоматическое обновление [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube) на Windows.
 Неофициальная утилита, не связана с автором zapret.
